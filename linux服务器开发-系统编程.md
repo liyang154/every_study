@@ -706,6 +706,8 @@ int main(int args, cha *argv[])
 
 ​	**创建共享内存映射**
 
+​	头文件：#include<sys/mman.h>
+
 ​	void *mmap(void *adrr, size_t length, int prot, int flags, int fd, off_t offset); 
 
 返回：成功：返回创建的映射区首地址；**失败：MAP_FAILED宏**
@@ -727,3 +729,94 @@ int main(int args, cha *argv[])
 ​     fd：     用来建立映射区的文件描述符
 
 ​     offset：  映射文件的偏移(4k的整数倍)。默认0，表示映射文件全部。
+
+**示例：**
+
+```c++
+void testMmap(){
+    char *p=NULL;
+    int fd;
+    fd=open("testMap",O_RDWR|O_CREAT|O_TRUNC,0644);
+    if(fd==-1){
+        throw("open error");
+    }
+    //拓展文件大小
+    /*lseek(fd,10,SEEK_END);
+    write(fd,"\0",1);*/
+
+    ftruncate(fd,10);               //
+    //获取文件长度
+    int len=lseek(fd,0,SEEK_END);
+    p=(char *)mmap(NULL,len,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
+    //失败
+    if(p==MAP_FAILED){
+       throw("mmap error");
+    }
+     
+    //使用p对文件进行读写操作
+    strcpy(p,"hello world");
+    cout<<p<<endl;
+
+    int ret=munmap((void *)p,len);
+    if(ret==-1){
+        throw("munmap error");
+    }
+}
+```
+
+**注意事项：**
+
+1.用于创建映射区的文件大小为0，实际指定大小非0，会出现总线错误。
+
+2.用于创建映射区的文件大小为0，实际指定0大小创建映射区，会出现无效参数。
+
+3.如果open时O_RDONLY, mmap时PROT参数指定PROT_READ|PROT_WRITE会怎样？
+
+​	会出现无效参数
+
+4.文件描述符fd在mmap创建映射区完成即可关闭。后续访问文件，用地址访问。
+
+5.如果文件偏移量不是4k的整数倍，不垂涎无效参数的错误。
+
+6.对申请的内存，不能越界访问。
+
+7.不能对内存进行++操作。
+
+8.需要检查mmap函数的返回值。	
+
+9.映射区访问权限为“私有”MAP_PRIVATE,对内存所做的所有修改，只在内存有效，不会反应到物理磁盘上。
+
+10.映射区访问权限为MAP_PRIVATE,只需要open文件是，有读权限，用于创建映射区即可。
+
+11.创建映射区，需要read权限。当访问权限指定为“共享”MAP_SHARE时，mmap的读写权限，应该<=文件的open权限，只写不行。
+
+**mmap保险调用方式**
+
+1.fd=open("文件名"，O_RDWR)
+
+2.mmap(NULL，有效文件大小，PROT_READ|PROT_WRITE，MAP_SHARED，fd ,0);
+
+**总结**：
+
+1. 创建映射区的过程中，隐含着一次对映射文件的读操作。
+
+2. 当MAP_SHARED时，要求：映射区的权限应 <=文件打开的权限(出于对映射区的保护)。而MAP_PRIVATE则无所谓，因为mmap中的权限是对内存的限制。
+
+3. 映射区的释放与文件关闭无关。只要映射建立成功，文件可以立即关闭。
+
+4. 特别注意，当映射文件大小为0时，不能创建映射区。所以：用于映射的文件必须要有实际大小！！  mmap使用时常常会出现总线错误，通常是由于共享文件存储空间大小引起的。
+
+5. munmap传入的地址一定是mmap的返回地址。坚决杜绝指针++操作。
+
+6. 如果文件偏移量必须为4K的整数倍
+
+7. mmap创建映射区出错概率非常高，一定要检查返回值，确保映射区建立成功再进行后续操作。
+
+#### munmap函数
+
+释放映射区
+
+同malloc函数申请内存空间类似的，mmap建立的映射区在使用结束后也应调用类似free的函数来释放。
+
+int munmap(void *addr, size_t length); 成功：0； 失败：-1
+
