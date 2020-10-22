@@ -418,7 +418,7 @@ int main()
 {
     int fd[2];
     pid_t pid;
-    int ret = pipe(fd);
+    int ret = pipe(fd);						//先pipe,后fork
     if (ret == -1)
     {
         perror("pipe error:");
@@ -686,7 +686,7 @@ int main(int args, cha *argv[])
 }
 ```
 
-#### 共享存储映射
+#### 共享存储映射mmap
 
 ------
 
@@ -694,7 +694,7 @@ int main(int args, cha *argv[])
 
 ------
 
-#### 存储映射I/O
+##### 存储映射I/O
 
 ​	存储映射I/O (Memory-mapped I/O) 使一个磁盘文件与存储空间中的一个缓冲区相映射。于是当从缓冲区中取数据，就相当于读文件中的相应字节。于此类似，将数据存入缓冲区，则相应的字节就自动写入文件。这样，就可在不适用read和write函数的情况下，使用地址（指针）完成I/O操作。
 
@@ -702,7 +702,7 @@ int main(int args, cha *argv[])
 
 ![image-20201016193613564](C:\Users\yang\AppData\Roaming\Typora\typora-user-images\image-20201016193613564.png)
 
-####  mmap函数
+#####  mmap函数
 
 ​	**创建共享内存映射**
 
@@ -812,7 +812,7 @@ void testMmap(){
 
 7. mmap创建映射区出错概率非常高，一定要检查返回值，确保映射区建立成功再进行后续操作。
 
-#### munmap函数
+##### munmap函数
 
 释放映射区
 
@@ -820,3 +820,288 @@ void testMmap(){
 
 int munmap(void *addr, size_t length); 成功：0； 失败：-1
 
+##### mmap建立父子间进程通信
+
+先创建映射区，在创建映射空间
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/wait.h>
+
+int var = 100;
+
+int main(void)
+{
+    int *p;								//p必须为指针类型，才能够修改内存
+    pid_t pid;
+
+    int fd;
+    fd = open("temp", O_RDWR|O_CREAT|O_TRUNC, 0644);
+    if(fd < 0){
+        perror("open error");
+        exit(1);
+    }
+    unlink("temp");				//删除临时文件目录项,使之具备被释放条件.
+    //扩展文件大小
+    ftruncate(fd, 4);
+
+    p = (int *)mmap(NULL, 4, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    //p = (int *)mmap(NULL, 4, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
+    if(p == MAP_FAILED){		//注意:不是p == NULL
+        perror("mmap error");
+        exit(1);
+    }
+    close(fd);					//映射区建立完毕,即可关闭文件
+
+    pid = fork();				//创建子进程
+    if(pid == 0){
+        *p = 2000;
+        var = 1000;
+        printf("child, *p = %d, var = %d\n", *p, var);
+    } else {
+        sleep(1);
+        printf("parent, *p = %d, var = %d\n", *p, var);
+        wait(NULL);
+
+        int ret = munmap(p, 4);				//释放映射区
+        if (ret == -1) {
+            perror("munmap error");
+            exit(1);
+        }
+    }
+
+    return 0;
+}
+```
+
+**父子进程使用mmap进程间通信流程**
+
+​	父进程先创建映射区。	open(O_RDWR)   mmap(MAP_SHARED)
+
+​	指定MAP_SHARED 权限
+
+​	fork()创建子进程
+
+​	一个进程读，另一个进程写。
+
+**无血缘关系进程间mmap通信**
+
+​	两个进程打开同一个文件，创建映射区。
+
+​	指定flags为MAP_SHARED。
+
+​	一个进程写入，另一个进程读出。
+
+​	【注意】：无血缘关系进程间通信。**mmap:数据可以重复读**。
+
+​															  **fifo:数据只能一次读取**。 
+
+**匿名映射**
+
+​	使用**MAP_ANONYMOUS** (或MAP_ANON)， 如: 
+
+​     int *p = mmap(NULL, 4, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0); 
+
+ 	 "4"随意举例，该位置表大小，可依实际需要填写。
+
+需注意的是，MAP_ANONYMOUS和MAP_ANON这两个宏是Linux操作系统特有的宏。在类Unix系统中如无该宏定义，可使用如下两步来完成匿名映射区的建立。
+
+​     ① fd = open("/dev/zero", O_RDWR);
+
+​     ② p = mmap(NULL, size, PROT_READ|PROT_WRITE, MMAP_SHARED, fd, 0);
+
+#### 信号
+
+##### **信号的产生**
+
+1. 按键产生，如：Ctrl+c、Ctrl+z、Ctrl+\
+
+   Ctrl + c → 2) SIGINT（终止/中断）  "INT" ----Interrupt
+
+   Ctrl + z → 20) SIGTSTP（暂停/停止） "T" ----Terminal 终端。
+
+   Ctrl + \ → 3) SIGQUIT（退出） 
+
+2. 系统调用产生，如：kill、raise、abort
+
+3. 软件条件产生，如：定时器alarm
+
+4. 硬件异常产生，如：非法访问内存(段错误)、除0(浮点数例外)、内存对齐出错(总线错误)
+
+5. 命令产生，如：kill命令 
+
+**递达**：递送并且到达进程
+
+**未决**：产生和递达之间的状态。主要由于阻塞(屏蔽)导致该状态。 
+
+**信号的处理方式:** 
+
+1. 执行默认动作 
+
+2. 忽略(丢弃) 
+
+3. 捕捉(调用户处理函数)
+
+Linux内核的进程控制块PCB是一个结构体，task_struct, 除了包含进程id，状态，工作目录，用户id，组id，文件描述符表，还包含了信号相关的信息，主要指阻塞信号集和未决信号集。
+
+**阻塞信号集(信号屏蔽字)**： 将某些信号加入集合，对他们设置屏蔽，当屏蔽x信号后，再收到该信号，该信号的处理将推后(解除屏蔽后)
+
+**未决信号集**: 
+
+1. 信号产生，未决信号集中描述该信号的位立刻翻转为1，表信号处于未决状态。当信号被处理对应位翻转回为0。这一时刻往往非常短暂。
+
+2. 信号产生后由于某些原因(主要是阻塞)不能抵达。这类信号的集合称之为未决信号集。在屏蔽解除前，信号一直处于未决状态。
+
+**信号四要素**：
+
+1. 编号   2. 名称   3. 事件   4. 默认处理动作
+
+**linux常规信号一览表**
+
+1) **SIGHUP**: 当用户退出shell时，由该shell启动的所有进程将收到这个信号，默认动作为终止进程
+
+2) **SIGINT**：当用户按下了<Ctrl+C>组合键时，用户终端向正在运行中的由该终端启动的程序发出此信号。默认动
+
+作为终止进程。
+
+3) **SIGQUIT**：当用户按下<ctrl+\>组合键时产生该信号，用户终端向正在运行中的由该终端启动的程序发出些信
+
+号。默认动作为终止进程。
+
+4) SIGILL：CPU检测到某进程执行了非法指令。默认动作为终止进程并产生core文件
+
+5) SIGTRAP：该信号由断点指令或其他 trap指令产生。默认动作为终止里程 并产生core文件。
+
+6) SIGABRT: 调用abort函数时产生该信号。默认动作为终止进程并产生core文件。
+
+7) **SIGBUS**：非法访问内存地址，包括内存对齐出错，默认动作为终止进程并产生core文件。
+
+8) **SIGFPE**：在发生致命的运算错误时发出。不仅包括浮点运算错误，还包括溢出及除数为0等所有的算法错误。默认动作为终止进程并产生core文件。
+
+9) **SIGKILL**：无条件终止进程。**本信号不能被忽略，处理和阻塞**。**默认动作为终止进程**。它向系统管理员提供了可以杀死任何进程的方法。
+
+10) **SIGUSE1**：用户定义 的信号。即程序员可以在程序中定义并使用该信号。默认动作为终止进程。
+
+11) **SIGSEGV**：指示进程进行了无效内存访问。**默认动作为终止进程并产生core文件**。**段错误**。
+
+12) **SIGUSR2**：另外一个用户自定义信号，程序员可以在程序中定义并使用该信号。默认动作为终止进程。
+
+13) **SIGPIPE **：Broken pipe向一个没有读端的管道写数据。默认动作为终止进程。
+
+14) **SIGALRM**: 定时器超时，超时的时间 由系统调用alarm设置。**默认动作为终止进程**。
+
+15) **SIGTERM**：程序结束信号，与SIGKILL不同的是，**该信号可以被阻塞和终止**。通常用来要示程序正常退出。执行shell命令Kill时，缺省产生这个信号。默认动作为终止进程。
+
+16) SIGSTKFLT：Linux早期版本出现的信号，现仍保留向后兼容。默认动作为终止进程。
+
+17) SIGCHLD：子进程结束时，父进程会收到这个信号。**默认动作为忽略这个信号**。
+
+18) SIGCONT：如果进程已停止，则使其继续运行。默认动作为继续/忽略。
+
+19) **SIGSTOP**：停止进程的执行。信号不能被忽略，处理和阻塞。**默认动作为暂停进程**。
+
+20) SIGTSTP：停止终端交互进程的运行。按下<ctrl+z>组合键时发出这个信号。默认动作为暂停进程。
+
+21) SIGTTIN：后台进程读终端控制台。默认动作为暂停进程。
+
+22) SIGTTOU: 该信号类似于SIGTTIN，在后台进程要向终端输出数据时发生。默认动作为暂停进程。
+
+23) SIGURG：套接字上有紧急数据时，向当前正在运行的进程发出些信号，报告有紧急数据到达。如网络带外数据到达，默认动作为忽略该信号。
+
+24) SIGXCPU：进程执行时间超过了分配给该进程的CPU时间 ，系统产生该信号并发送给该进程。默认动作为终止进程。
+
+25) SIGXFSZ：超过文件的最大长度设置。默认动作为终止进程。
+
+26) SIGVTALRM：虚拟时钟超时时产生该信号。类似于SIGALRM，但是该信号只计算该进程占用CPU的使用时间。默认动作为终止进程。
+
+27) SGIPROF：类似于SIGVTALRM，它不公包括该进程占用CPU时间还包括执行系统调用时间。默认动作为终止进程。
+
+28) SIGWINCH：窗口变化大小时发出。默认动作为忽略该信号。
+
+29) SIGIO：此信号向进程指示发出了一个异步IO事件。默认动作为忽略。
+
+30) SIGPWR：关机。默认动作为终止进程。
+
+31) SIGSYS：无效的系统调用。默认动作为终止进程并产生core文件。
+
+34) SIGRTMIN ～ (64) SIGRTMAX：LINUX的实时信号，它们没有固定的含义（可以由用户自定义）。所有的实时信号的默认动作都为终止进程。
+
+ **默认动作：**
+
+​          Term：终止进程
+
+​          Ign： 忽略信号 (默认即时对该种信号忽略操作)
+
+​          Core：终止进程，生成Core文件。(查验进程死亡原因， 用于gdb调试)
+
+​          Stop：停止（暂停）进程
+
+​          Cont：继续运行进程
+
+这里特别强调了**9) SIGKILL 和19) SIGSTOP信号，不允许忽略和捕捉，只能执行默认动作。甚至不能将其设置为阻塞。**
+
+**另外需清楚，只有每个信号所对应的事件发生了，该信号才会被递送(但不一定递达)，不应乱发信号！！**
+
+------
+
+##### kill函数/命令产生信号
+
+kill命令产生信号：kill -SIGKILL pid
+
+杀死进程组 kill -SIGKILL -pid(进程组ip)
+
+查看进程组 ps ajx
+
+kill函数：给指定进程发送指定信号(不一定杀死)
+
+头文件：#include <sys/types.h>
+
+​				#include<signal.h>
+
+ int kill(pid_t pid, int sig);  成功：0；失败：-1 (ID非法，信号非法，普通用户杀    init进程等权级问题)，设置errno
+
+​     sig：不推荐直接使用数字，**应使用宏名**，因为不同操作系统信号编号可能不				同，但名称一致。
+
+​	 pid > 0: 发送信号给指定的进程。
+
+​     pid = 0: 发送信号给 与调用kill函数进程属于同一进程组的所有进程。
+
+​     pid < 0: 取|pid|发给对应进程组。
+
+​     pid = -1：发送给进程有权限发送的系统中所有进程。
+
+**进程组**：每个进程都属于一个进程组，进程组是一个或多个进程集合，他们相互关联，共同完成一个实体任务，每个进程组都有一个进程组长，默认进程组ID与进程组长ID相同。
+
+##### raise和abort函数
+
+#include<signal.h>
+
+raise 函数：给当前进程发送指定信号(自己给自己发)  raise(signo) == kill(getpid(), signo);
+
+​       int raise(int sig); 成功：0，失败非0值
+
+------
+
+#include<stdlib.h>
+
+abort 函数：给自己发送异常终止信号 6) SIGABRT 信号，终止并产生core文件
+
+​       void abort(void); 该函数无返回
+
+##### alarm函数
+
+使用自然计时法（不常用，一般用sleep或者usleep）
+
+设置定时器(闹钟)。在指定seconds后，内核会给当前进程发送14）SIGALRM信号。进程收到该信号，默认动作终止。
+
+**每个进程都有且只有唯一个定时器。**
+
+unsigned int alarm(unsigned int seconds); 返回0或上个定时器剩余的秒数，无失败。
+
+​     常用：取消定时器alarm(0)，返回旧闹钟余下秒数。
+
+**实际执行时间 = 系统时间 + 用户时间 + 等待时间**
