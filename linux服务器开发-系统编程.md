@@ -1,4 +1,4 @@
-# 进程相关概念
+#  进程相关概念
 
 ## 1、程序和进程
 
@@ -312,7 +312,7 @@ if(pid>0){
 
 WIFEXITED（status）为非0   ---->   进程正常结束
 
-WEXITSTATUS（status）如上宏为真，使用此宏 ----->   获取进程退出状态（exit的参数）
+WEXITSTATUS（status）如上宏为真，使用此宏 ----->   **获取进程退出状态（exit的参数）**
 
 ------
 
@@ -1105,3 +1105,381 @@ unsigned int alarm(unsigned int seconds); 返回0或上个定时器剩余的秒�
 ​     常用：取消定时器alarm(0)，返回旧闹钟余下秒数。
 
 **实际执行时间 = 系统时间 + 用户时间 + 等待时间**
+
+------
+
+##### 信号集操作函数
+
+内核通过读取未决信号集来判断信号是否应被处理。信号屏蔽字mask可以影响未决信号集。而我们可以在应用程序中自定义set来改变mask，以达到屏蔽指定信号的目的。
+
+**信号集设定**
+
+头文件：#include<signal.h>
+
+sigset_t set;     // typedef unsigned long sigset_t; 
+
+int sigemptyset(sigset_t *set);             将某个信号集清0             成功：0；失败：-1
+
+int sigfillset(sigset_t *set);                 将某个信号集置1            成功：0；失败：-1
+
+int sigaddset(sigset_t *set, int signum);      将某个信号加入信号集       成功：0；失败：-1
+
+ int sigdelset(sigset_t *set, int signum);      将某个信号清出信号集       成功：0；失败：-1
+
+int sigismember(const sigset_t *set, int signum);判断某个信号是否在信号集中   返回值：在集合：1；不在：0；出错：-1 
+
+ sigset_t类型的本质是位图。但不应该直接使用位操作，而应该使用上述函数，保证跨系统操作有效。  对比认知select 函数。
+
+**sigprocmask函数**
+
+用来屏蔽信号、解除屏蔽也使用该函数。其本质，读取或修改进程的信号屏蔽字(PCB中)
+
+  **严格注意，屏蔽信号：只是将信号处理延后执行(延至解除屏蔽)；而忽略表示将信号丢处理。**
+
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);  成功：0；失败：-1，设置errno
+
+参数：
+
+​          set：传入参数，是一个位图，**set中哪位置1，就表示当前进程屏蔽哪个信号。**
+
+​          oldset：传出参数，保存旧的信号屏蔽集。
+
+​          how参数取值：  假设当前的信号屏蔽字为mask
+
+​			1.    SIG_BLOCK: 当how设置为此值，set表示需要屏蔽的信号。相当于 mask = mask|set
+
+2. SIG_UNBLOCK: 当how设置为此，set表示需要解除屏蔽的信号。相当于 mask = mask & ~set
+
+3. SIG_SETMASK: 当how设置为此，set表示用于替代原始屏蔽及的新屏蔽集。相当于 mask = set若，调用sigprocmask解除了对当前若干个信号的阻塞，则在sigprocmask返回前，至少将其中一个信号递达。（不推荐使用该方法）
+
+**sigpending函数**
+
+读取当前进程的**未决**信号集
+
+int sigpending(sigset_t *set); set传出参数。  返回值：成功：0；失败：-1，设置errno
+
+------
+
+mask:信号屏蔽字
+
+set:用户自定义的信号集，可以用在mask上
+
+------
+
+##### 信号捕捉
+
+**signal函数**
+
+**注册**一个信号捕捉函数：
+
+头文件#include<signal.h>
+
+typedef void (*sighandler_t)(int);
+
+sighandler_t signal(int signum, sighandler_t handler);
+
+**signum:**某个系统信号
+
+​     该函数由ANSI定义，由于历史原因在不同版本的Unix和不同版本的Linux中可能有不同的行为。因此应该尽量避免使用它，取而代之使用sigaction函数。
+
+  void (*signal(int signum, void (*sighandler_t)(int))) (int);
+
+  能看出这个函数代表什么意思吗？ 注意多在复杂结构中使用typedef。
+
+```c
+void sys_err(const char * str){
+    perror(str);
+    exit(1);
+}
+//信号捕捉函数
+void sig_cath(int signo){
+    printf("catch you!!! %d\n",signo);
+}
+int main(){
+    signal(SIGINT,sig_cath);
+    while(1);			//该循环只是为了保证有足够的时间来测试函数特性
+    return 0;
+}
+```
+
+**sigaction函数**  
+
+头文件：\#include <bits/sigaction.h> 
+
+​				#include<signal.h>
+
+修改信号处理动作（通常在Linux用其来注册一个信号的捕捉函数）
+
+  int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact); 成功：0；失败：-1，设置errno
+
+参数：
+
+act：传入参数，新的处理方式。
+
+​          oldact：传出参数，旧的处理方式。              
+
+**struct sigaction结构体**
+
+  struct sigaction {
+
+​    void   (*sa_handler)(int);
+
+​    void   (*sa_sigaction)(int, siginfo_t *, void *);
+
+​    sigset_t  sa_mask; 
+
+​    int    sa_flags; 
+
+​    void   (*sa_restorer)(void);
+
+  };
+
+​     sa_restorer：该元素是过时的，不应该使用，POSIX.1标准将不指定该元素。(弃用)
+
+​     sa_sigaction：当sa_flags被指定为SA_SIGINFO标志时，使用该信号处理程序。(很少使用) 
+
+重点掌握：
+
+​     ① **sa_handler**：指定信号捕捉后的处理函数名(即注册函数)。也可赋值为SIG_IGN表忽略 或 SIG_DFL表执行默认动作
+
+​     ② **sa_mask**: 调用信号处理函数时，所要屏蔽的信号集合(信号屏蔽字)。注意：仅在处理函数被调用期间屏蔽生效，是临时性设置。
+
+​     ③ sa_flags：通常设置为0，表使用默认属性。
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+
+/*自定义的信号捕捉函数*/
+void sig_int(int signo)
+{
+	printf("catch signal SIGINT\n");//单次打印
+    sleep(10);
+    printf("----slept 10 s\n");
+}
+
+int main(void)
+{
+	struct sigaction act;		
+
+	act.sa_handler = sig_int;
+	act.sa_flags = 0;
+	sigemptyset(&act.sa_mask);		//不屏蔽任何信号
+    //sigaddset(&act.sa_mask, SIGQUIT);		
+
+	sigaction(SIGINT, &act, NULL);
+
+    printf("------------main slept 10\n");
+    sleep(10);
+
+	while(1);//该循环只是为了保证有足够的时间来测试函数特性
+
+	return 0;
+}
+```
+
+**信号捕捉特性**
+
+1. 进程正常运行时，默认PCB中有一个信号屏蔽字，假定为☆，它决定了进程自动屏蔽哪些信号。当注册了某个信号捕捉函数，捕捉到该信号以后，要调用该函数。而该函数有可能执行很长时间，在这期间所屏蔽的信号不由☆来指定。**而是用sa_mask来指定**。调用完信号处理函数，再恢复为☆。
+
+2. XXX信号捕捉函数执行期间，XXX信号自动被屏蔽。但是其他信号仍然可以被捕捉。
+
+3. **阻塞的常规信号不支持排队，产生多次只记录一次**。（后32个实时信号支持排队）
+
+**内核实现信号捕捉过程**
+
+![image-20201023194234168](C:\Users\yang\AppData\Roaming\Typora\typora-user-images\image-20201023194234168.png)
+
+用户态可以通过中断、系统调用进入内核态
+
+**SIGCHLD信号**（17）
+
+产生条件：
+
+​	子进程终止时
+
+​	子进程接收到SIGSTOP信号停止时
+
+​	子进程处在停止态，接受到SIGCONT后唤醒时
+
+```c
+
+//回收子进程
+void catch_child(int signo){
+    pid_t wpid;
+    while(wpid=wait(NULL)!=-1)          //循环回收子进程，防止出现僵尸进程
+        printf("catch chile id %d\n",wpid);
+}
+int main(){
+    pid_t pid;
+    int i;
+    for ( i = 0; i < 5; i++)
+    {
+        if((pid=fork())==0)
+            break;                  //子进程
+    }
+    if(i==5){
+        //父进程
+        printf("parent,pid=%d\n",getpid());
+        //在父进程回收子进程
+        struct sigaction act;
+        act.sa_handler=catch_child;                             //注册信号处理函数
+        sigemptyset(&act.sa_mask);
+        act.sa_flags=0;
+        sigaction(SIGCHLD,&act,NULL);                         //捕捉信号，并处理；SIGCHILD，子进程结束时会收到这个信号
+        while(1);
+    }else{
+        printf("child,pid=%d\n",getpid());
+    }
+     
+}
+```
+
+#### 会话
+
+创建会话
+
+创建一个会话需要注意以下6点注意事项：
+
+1. 调用进程不能是进程组组长，该进程变成新会话首进程(session header)
+
+2. **该进程成为一个新进程组的组长进程。**
+
+3. 需有root权限(ubuntu不需要)
+
+4. 新会话丢弃原有的控制终端，该会话没有控制终端
+
+5. **如果该调用进程是组长进程，则出错返回**
+
+6. 建立新会话时，先调用fork, 父进程终止，子进程调用setsid
+
+setsid函数
+
+创建一个会话，并以自己的ID设置进程组ID，同时也是新会话的ID。
+
+​     pid_t setsid(void); 成功：返回调用进程的会话ID；失败：-1，设置errno
+
+​     调用了setsid函数的进程，既是新的会长，也是新的组长。                               
+
+练习：fork一个子进程，并使其创建一个新会话。查看进程组ID、会话ID前后变化
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main(void)
+{
+    pid_t pid;
+
+    if ((pid = fork())<0) {
+        perror("fork");
+        exit(1);
+
+    } else if (pid == 0) {
+
+        printf("child process PID is %d\n", getpid());
+        printf("Group ID of child is %d\n", getpgid(0));
+        printf("Session ID of child is %d\n", getsid(0));
+
+        sleep(10);
+        setsid();       //子进程非组长进程，故其成为新会话首进程，且成为组长进程。该进程组id即为会话进程
+
+        printf("Changed:\n");
+
+        printf("child process PID is %d\n", getpid());
+        printf("Group ID of child is %d\n", getpgid(0));
+        printf("Session ID of child is %d\n", getsid(0));
+
+        sleep(20);
+
+        exit(0);
+    }
+
+    return 0;
+}
+```
+
+#### 守护进程
+
+Daemon(精灵)进程，是Linux中的后台服务进程，**通常独立于控制终端并且周期性地执行某种任务或等待处理某些发生的事件**。一般采用以d结尾的名字。**不受用户登录注销影响。**
+
+eg : httpd，sshd
+
+Linux后台的一些系统服务进程，没有控制终端，不能直接和用户交互。不受用户登录、注销的影响，一直在运行着，他们都是守护进程。如：预读入缓输出机制的实现；ftp服务器；nfs服务器等。
+
+  创建守护进程，最关键的一步是调用setsid函数创建一个新的Session，并成为Session Leader。
+
+#### 创建守护进程
+
+1. 创建子进程，父进程退出
+
+   所有工作在子进程中进行形式上脱离了控制终端
+
+2. 在子进程中创建新会话
+
+　　     setsid()函数
+
+​			使子进程完全独立出来，脱离控制
+
+3. 改变当前目录为根目录
+
+   chdir()函数
+
+   **防止占用可卸载的文件系统**
+
+   **也可以换成其它路径**
+
+4. 重设文件权限掩码
+
+　　     umask()函数
+
+　　     防止继承的文件创建屏蔽字拒绝某些权限
+
+　　     增加守护进程灵活性
+
+5. 关闭文件描述符
+
+　　     继承的打开文件不会用到标准输入，标准输出，标准错误文件描述符。浪费系统资源，无法卸载
+
+6. 开始执行守护进程核心工作
+
+   守护进程退出处理程序模型
+
+```c
+void daemonize(void)
+{
+    pid_t pid;
+    /*
+     * * 成为一个新会话的首进程，失去控制终端
+     * */
+    if ((pid = fork()) < 0) {
+        perror("fork");
+        exit(1);
+    } else if (pid != 0) /* parent */
+        exit(0);
+    setsid();				//创建新会话
+    /*
+     * * 改变当前工作目录到/目录下.
+     * */
+    if (chdir("/") < 0) {
+        perror("chdir");
+        exit(1);
+    }
+    /* 设置umask为0 */
+    umask(0);			//改变文件访问权限掩码
+    /*
+     * * 重定向0，1，2文件描述符到 /dev/null，因为已经失去控制终端，再操作0，1，2没有意义.
+     * */
+    close(STDIN_FILENO);				//STDIN_FILENO 0
+    open("/dev/null", O_RDWR);
+    dup2(0, STDOUT_FILENO);				//STDOUT_FILENO 1
+    dup2(0, STDERR_FILENO);				//STDERR_FILENO 2
+    while(1);							//模拟守护进程业务
+}
+```
+
+## 8、线程
+
