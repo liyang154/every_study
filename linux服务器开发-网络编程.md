@@ -1,4 +1,4 @@
-# 网络基础
+#  网络基础
 
 ## 分层模型
 
@@ -772,335 +772,170 @@ int main(int argc, char *argv[])
 #### wrap.c
 
 ```c
-#include <stdlib.h>
-
-#include <errno.h>
-
-#include <sys/socket.h>
+#include "wrap.h"
 
 void perr_exit(const char *s)
-
 {
-
-  perror(s);
-
-  exit(1);
-
+	perror(s);
+	exit(1);
 }
-
 int Accept(int fd, struct sockaddr *sa, socklen_t *salenptr)
-
 {
-
-  int n;
-
-  again:
-
-  if ( (n = accept(fd, sa, salenptr)) < 0) {
-
-​    if ((errno == ECONNABORTED) || (errno == EINTR))
-
-​      goto again;
-
-​    else
-
-​      perr_exit("accept error");
-
-  }
-
-  return n;
-
+	int n;
+	again:
+	if ( (n = accept(fd, sa, salenptr)) < 0) {
+		if ((errno == ECONNABORTED) || (errno == EINTR))
+			goto again;
+		else
+			perr_exit("accept error");
+	}
+	return n;
 }
-
 int Bind(int fd, const struct sockaddr *sa, socklen_t salen)
-
 {
-
-  int n;
-
-  if ((n = bind(fd, sa, salen)) < 0)
-
-​    perr_exit("bind error");
-
-  return n;
-
+	int n;
+	if ((n = bind(fd, sa, salen)) < 0)
+		perr_exit("bind error");
+return n;
 }
-
 int Connect(int fd, const struct sockaddr *sa, socklen_t salen)
-
 {
-
-  int n;
-
-  if ((n = connect(fd, sa, salen)) < 0)
-
-​    perr_exit("connect error");
-
-  return n;
-
+	int n;
+	if ((n = connect(fd, sa, salen)) < 0)
+		perr_exit("connect error");
+	return n;
 }
-
 int Listen(int fd, int backlog)
-
 {
-
-  int n;
-
-  if ((n = listen(fd, backlog)) < 0)
-
-​    perr_exit("listen error");
-
-  return n;
-
+	int n;
+	if ((n = listen(fd, backlog)) < 0)
+		perr_exit("listen error");
+	return n;
 }
-
 int Socket(int family, int type, int protocol)
-
 {
-
-  int n;
-
-  if ( (n = socket(family, type, protocol)) < 0)
-
-​    perr_exit("socket error");
-
-  return n;
-
+	int n;
+	if ( (n = socket(family, type, protocol)) < 0)
+		perr_exit("socket error");
+	return n;
 }
-
 ssize_t Read(int fd, void *ptr, size_t nbytes)
-
 {
-
-  ssize_t n;
-
+	ssize_t n;
 again:
-
-  if ( (n = read(fd, ptr, nbytes)) == -1) {
-
-​    if (errno == EINTR)
-
-​      goto again;
-
-​    else
-
-​      return -1;
-
-  }
-
-  return n;
-
+	if ( (n = read(fd, ptr, nbytes)) == -1) {
+		if (errno == EINTR)
+			goto again;
+		else
+			return -1;
+	}
+	return n;
 }
-
 ssize_t Write(int fd, const void *ptr, size_t nbytes)
-
 {
-
-  ssize_t n;
-
+	ssize_t n;
 again:
-
-  if ( (n = write(fd, ptr, nbytes)) == -1) {
-
-​    if (errno == EINTR)
-
-​      goto again;
-
-​    else
-
-​      return -1;
-
-  }
-
-  return n;
-
+	if ( (n = write(fd, ptr, nbytes)) == -1) {
+		if (errno == EINTR)
+			goto again;
+		else
+			return -1;
+	}
+	return n;
 }
-
 int Close(int fd)
-
 {
-
-  int n;
-
-  if ((n = close(fd)) == -1)
-
-​    perr_exit("close error");
-
-  return n;
-
+int n;
+	if ((n = close(fd)) == -1)
+		perr_exit("close error");
+	return n;
 }
-
 ssize_t Readn(int fd, void *vptr, size_t n)
-
 {
+	size_t nleft;
+	ssize_t nread;
+	char *ptr;
 
-  size_t nleft;
+	ptr = (char *)vptr;
+	nleft = n;
 
-  ssize_t nread;
-
-  char *ptr;
-
- 
-
-  ptr = vptr;
-
-  nleft = n;
-
- 
-
-  while (nleft > 0) {
-
-​    if ( (nread = read(fd, ptr, nleft)) < 0) {
-
-​      if (errno == EINTR)
-
-​        nread = 0;
-
-​      else
-
-​        return -1;
-
-​    } else if (nread == 0)
-
-​      break;
-
-​    nleft -= nread;
-
-​    ptr += nread;
-
-  }
-
-  return n - nleft;
-
+	while (nleft > 0) {
+		if ( (nread = read(fd, ptr, nleft)) < 0) {
+			if (errno == EINTR)
+				nread = 0;
+			else
+				return -1;
+		} else if (nread == 0)
+			break;
+		nleft -= nread;
+		ptr += nread;
+	}
+	return n - nleft;
 }
-
- 
 
 ssize_t Writen(int fd, const void *vptr, size_t n)
-
 {
+	size_t nleft;
+	ssize_t nwritten;
+	const char *ptr;
 
-  size_t nleft;
+	ptr = (const char *)vptr;
+	nleft = n;
 
-  ssize_t nwritten;
-
-  const char *ptr;
-
- 
-
-  ptr = vptr;
-
-  nleft = n;
-
- 
-
-  while (nleft > 0) {
-
-​    if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
-
-​      if (nwritten < 0 && errno == EINTR)
-
-​        nwritten = 0;
-
-​      else
-
-​        return -1;
-
-​    }
-
-​    nleft -= nwritten;
-
-​    ptr += nwritten;
-
-  }
-
-  return n;
-
+	while (nleft > 0) {
+		if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
+			if (nwritten < 0 && errno == EINTR)
+				nwritten = 0;
+			else
+				return -1;
+		}
+		nleft -= nwritten;
+		ptr += nwritten;
+	}
+	return n;
 }
-
- 
-
-static ssize_t my_read(int fd, char *ptr)
-
+ssize_t my_read(int fd, char *ptr)
 {
+	static int read_cnt;
+	static char *read_ptr;
+	static char read_buf[100];
 
-  static int read_cnt;
-
-  static char *read_ptr;
-
-  static char read_buf[100];
-
- 
-
-  if (read_cnt <= 0) {
-
+	if (read_cnt <= 0) {
 again:
-
-​    if ((read_cnt = read(fd, read_buf, sizeof(read_buf))) < 0) {
-
-​      if (errno == EINTR)
-
-​        goto again;
-
-​      return -1; 
-
-​    } else if (read_cnt == 0)
-
-​      return 0;
-
-​    read_ptr = read_buf;
-
-  }
-
-  read_cnt--;
-
-  *ptr = *read_ptr++;
-
-  return 1;
-
+		if ((read_cnt = read(fd, read_buf, sizeof(read_buf))) < 0) {
+			if (errno == EINTR)
+				goto again;
+			return -1;	
+		} else if (read_cnt == 0)
+			return 0;
+		read_ptr = read_buf;
+	}
+	read_cnt--;
+	*ptr = *read_ptr++;
+	return 1;
 }
-
- 
 
 ssize_t Readline(int fd, void *vptr, size_t maxlen)
-
 {
+	ssize_t n, rc;
+	char c, *ptr;
+	ptr = (char *)vptr;
 
-  ssize_t n, rc;
-
-  char c, *ptr;
-
-  ptr = vptr;
-
- 
-
-  for (n = 1; n < maxlen; n++) {
-
-​    if ( (rc = my_read(fd, &c)) == 1) {
-
-​      *ptr++ = c;
-
-​      if (c == '\n')
-
-​        break;
-
-​    } else if (rc == 0) {
-
-​      *ptr = 0;
-
-​      return n - 1;
-
-​    } else
-
-​      return -1;
-
-  }
-
-  *ptr = 0;
-
-  return n;
-
+	for (n = 1; n < maxlen; n++) {
+		if ( (rc = my_read(fd, &c)) == 1) {
+			*ptr++ = c;
+			if (c == '\n')
+				break;
+		} else if (rc == 0) {
+			*ptr = 0;
+			return n - 1;
+		} else
+			return -1;
+	}
+	*ptr = 0;
+	return n;
 }
+
 ```
 
 
@@ -1109,36 +944,30 @@ ssize_t Readline(int fd, void *vptr, size_t maxlen)
 
 ``` c
 #ifndef __WRAP_H_
-
 #define __WRAP_H_
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/socket.h>
+
 void perr_exit(const char *s);
-
 int Accept(int fd, struct sockaddr *sa, socklen_t *salenptr);
-
 int Bind(int fd, const struct sockaddr *sa, socklen_t salen);
-
 int Connect(int fd, const struct sockaddr *sa, socklen_t salen);
-
 int Listen(int fd, int backlog);
-
 int Socket(int family, int type, int protocol);
-
 ssize_t Read(int fd, void *ptr, size_t nbytes);
-
 ssize_t Write(int fd, const void *ptr, size_t nbytes);
-
 int Close(int fd);
-
 ssize_t Readn(int fd, void *vptr, size_t n);
-
 ssize_t Writen(int fd, const void *vptr, size_t n);
-
 ssize_t my_read(int fd, char *ptr);
-
 ssize_t Readline(int fd, void *vptr, size_t maxlen);
 
 #endif
+
 ```
 
 ### 多进程并发服务器
@@ -1576,7 +1405,7 @@ int select(int nfds, fd_set *readfds, fd_set *writefds,
 
 ​	
 
-#### server.c
+##### server.c
 
 ```c
 /* server.c */
@@ -1679,7 +1508,7 @@ for ( ; ; ) {
 }
 ```
 
-#### client.c
+##### client.c
 
 ```c
 /* client.c */
@@ -1716,6 +1545,742 @@ int main(int argc, char *argv[])
 			Write(STDOUT_FILENO, buf, n);
 	}
 	Close(sockfd);
+	return 0;
+}
+```
+
+##### 优缺点
+
+​	缺点：监听上限受文件描述符限制。最大是1024.
+
+​				无法直接检测满足条件的文件描述符。提高了编码难度。
+
+​	优点：跨平台。win、linux、unix
+
+#### poll
+
+```c
+#include <poll.h>
+int poll(struct pollfd *fds, nfds_t nfds, int timeout);
+	struct pollfd {
+		int fd; /* 文件描述符 */
+		short events; /* 监控的事件 */  取值：POLLIN、POLLOUT、POLLERR
+		short revents; /* 监控事件中满足条件返回的事件 */传入时给0.如果满足对应事件的话，返回非0--> POLLIN、POLLOUT、POLLERR
+	};
+	POLLIN			普通或带外优先数据可读,即POLLRDNORM | POLLRDBAND
+	POLLRDNORM		数据可读
+	POLLRDBAND		优先级带数据可读
+	POLLPRI 		高优先级可读数据
+	POLLOUT			普通或带外数据可写
+	POLLWRNORM		数据可写
+	POLLWRBAND		优先级带数据可写
+	POLLERR 		发生错误
+	POLLHUP 		发生挂起
+	POLLNVAL 		描述字不是一个打开的文件
+
+    fds				监听的文件描述符[数组]
+	nfds 			监控数组中有多少文件描述符需要被监控
+
+	timeout 		毫秒级等待
+		-1：阻塞等，#define INFTIM -1 				Linux中没有定义此宏
+		0：立即返回，不阻塞进程
+		>0：等待指定毫秒数，如当前系统时间精度不够毫秒，向上取值
+       
+   返回值：返回满足对应监听事件的文件描述符  总个数
+
+```
+
+##### server.c
+
+```c
+/* server.c */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <poll.h>
+#include <errno.h>
+#include "wrap.h"
+
+#define MAXLINE 80
+#define SERV_PORT 6666
+#define OPEN_MAX 1024
+
+int main(int argc, char *argv[])
+{
+	int i, j, maxi, listenfd, connfd, sockfd;
+	int nready;
+	ssize_t n;
+	char buf[MAXLINE], str[INET_ADDRSTRLEN];
+	socklen_t clilen;
+	struct pollfd client[OPEN_MAX];
+	struct sockaddr_in cliaddr, servaddr;
+listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	Bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	Listen(listenfd, 20);
+
+	client[0].fd = listenfd;
+	client[0].events = POLLRDNORM;/* listenfd监听普通读事件 */
+
+	for (i = 1; i < OPEN_MAX; i++)
+		client[i].fd = -1; 	/* 用-1初始化client[]里剩下元素 */
+	maxi = 0; 			/* client[]数组有效元素中最大元素下标 */
+
+	for ( ; ; ) {
+		nready = poll(client, maxi+1, -1); 		/* 阻塞 */
+		if (client[0].revents & POLLRDNORM) {    /* 有客户端链接请求 */
+			clilen = sizeof(cliaddr);
+			connfd = Accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
+			printf("received from %s at PORT %d\n",
+					inet_ntop(AF_INET, &cliaddr.sin_addr, str, sizeof(str)),
+					ntohs(cliaddr.sin_port));
+			for (i = 1; i < OPEN_MAX; i++) {
+				if (client[i].fd < 0) {
+					client[i].fd = connfd; 	/* 找到client[]中空闲的位置，存放accept返回的connfd */
+					break;
+				}
+			}
+
+			if (i == OPEN_MAX)
+				perr_exit("too many clients");
+
+			client[i].events = POLLRDNORM; 		/* 设置刚刚返回的connfd，监控读事件 */
+			if (i > maxi)
+				maxi = i; 						/* 更新client[]中最大元素下标 */
+			if (--nready <= 0)
+				continue; 						/* 没有更多就绪事件时,继续回到poll阻塞 */
+		}
+		for (i = 1; i <= maxi; i++) { 			/* 检测client[] */
+			if ((sockfd = client[i].fd) < 0)
+				continue;
+			if (client[i].revents & (POLLRDNORM | POLLERR)) {
+				if ((n = Read(sockfd, buf, MAXLINE)) < 0) {
+					if (errno == ECONNRESET) { /* 当收到 RST标志时 */
+	/* connection reset by client */
+						printf("client[%d] aborted connection\n", i);
+						Close(sockfd);
+						client[i].fd = -1;
+					} else {
+						perr_exit("read error");
+					}
+				} else /* server.c */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <poll.h>
+#include <errno.h>
+#include "wrap.h"
+
+#define MAXLINE 80
+#define SERV_PORT 6666
+#define OPEN_MAX 1024
+
+int main(int argc, char *argv[])
+{
+	int i, j, maxi, listenfd, connfd, sockfd;
+	int nready;
+	ssize_t n;
+	char buf[MAXLINE], str[INET_ADDRSTRLEN];
+	socklen_t clilen;
+	struct pollfd client[OPEN_MAX];
+	struct sockaddr_in cliaddr, servaddr;
+listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	//servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    int dst;
+    inet_pton(AF_INET, "192.168.102.1", (void *)&dst);
+    servaddr.sin_addr.s_addr = dst;
+    
+	servaddr.sin_port = htons(SERV_PORT);
+
+	Bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	Listen(listenfd, 20);
+
+	client[0].fd = listenfd;
+	client[0].events = POLLIN;/* listenfd监听普通读事件 */
+
+	for (i = 1; i < OPEN_MAX; i++)
+		client[i].fd = -1; 	/* 用-1初始化client[]里剩下元素 */
+	maxi = 0; 			/* client[]数组有效元素中最大元素下标 */
+
+	for ( ; ; ) {
+		nready = poll(client, maxi+1, -1); 		/* 阻塞 */
+		if (client[0].revents & POLLIN) {    /* 有客户端链接请求 */
+			clilen = sizeof(cliaddr);
+			connfd = Accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
+			printf("received from %s at PORT %d\n",
+					inet_ntop(AF_INET, &cliaddr.sin_addr, str, sizeof(str)),
+					ntohs(cliaddr.sin_port));
+			for (i = 1; i < OPEN_MAX; i++) {
+				if (client[i].fd < 0) {
+					client[i].fd = connfd; 	/* 找到client[]中空闲的位置，存放accept返回的connfd */
+					break;
+				}
+			}
+
+			if (i == OPEN_MAX)
+				perr_exit("too many clients");
+
+			client[i].events = POLLIN; 		/* 设置刚刚返回的connfd，监控读事件 */
+			if (i > maxi)
+				maxi = i; 						/* 更新client[]中最大元素下标 */
+			if (--nready <= 0)
+				continue; 						/* 没有更多就绪事件时,继续回到poll阻塞 */
+		}
+		for (i = 1; i <= maxi; i++) { 			/* 检测client[] */
+			if ((sockfd = client[i].fd) < 0)
+				continue;
+			if (client[i].revents & POLLIN) {
+				if ((n = Read(sockfd, buf, MAXLINE)) < 0) {
+					if (errno == ECONNRESET) { /* 当收到 RST标志时 */
+	/* connection reset by client */
+						printf("client[%d] aborted connection\n", i);
+						Close(sockfd);
+						client[i].fd = -1;
+					} else {
+						perr_exit("read error");
+					}
+				} else if (n == 0) {
+					/* connection closed by client */
+					printf("client[%d] closed connection\n", i);
+					Close(sockfd);
+					client[i].fd = -1;
+				} else {
+					for (j = 0; j < n; j++)
+						buf[j] = toupper(buf[j]);
+						Writen(sockfd, buf, n);
+				}
+				if (--nready <= 0)
+					break; 				/* no more readable descriptors */
+			}
+		}
+	}
+	return 0;
+}if (n == 0) {
+					/* connection closed by client */
+					printf("client[%d] closed connection\n", i);
+					Close(sockfd);
+					client[i].fd = -1;
+				} else {
+					for (j = 0; j < n; j++)
+						buf[j] = toupper(buf[j]);
+						Writen(sockfd, buf, n);
+				}
+				if (--nready <= 0)
+					break; 				/* no more readable descriptors */
+			}
+		}
+	}
+	return 0;
+}
+
+```
+
+##### client.c
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <ctype.h>
+
+#include "wrap.h"
+
+#define MAXLINE 80
+#define SERV_PORT 6666
+
+int main(int argc, char *argv[])
+{
+	struct sockaddr_in servaddr;
+	char buf[MAXLINE];
+	int sockfd, n;
+
+	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	inet_pton(AF_INET, "192.168.102.1", &servaddr.sin_addr);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	Connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	while (fgets(buf, MAXLINE, stdin) != NULL) {
+		Write(sockfd, buf, strlen(buf));
+		n = Read(sockfd, buf, MAXLINE);
+		if (n == 0)
+			printf("the other side has been closed.\n");
+		else
+			Write(STDOUT_FILENO, buf, n);
+	}
+	Close(sockfd);
+	return 0;
+}
+```
+
+##### read函数的返回值：
+
+​		>0:实际读到的字节数
+
+​		=0：socket中，表示对端关闭。需要close
+
+​		-1：	如果errno  ==  EINTR   被异常中断 。需要重启
+
+​					如果errno  ==  EAGIN 或 EWOULDBLOCK 以非阻塞方式读数据，但是没有数据。需要再次读
+
+​					如果errno  ==  ECONNRESET   说明连接被重置。需要close(),移除监听队列。
+
+##### 优缺点
+
+​	自带数组结构。可以将监听事件集合和返回事件集合分离
+
+​	拓展监听上限。超出1024的限制。
+
+​	不能跨平台，只能在linux。
+
+​	无法直接定位满足监听事件的文件描述符。
+
+##### 突破1024限制
+
+可以使用cat命令查看一个进程可以打开的socket描述符上限。
+
+当前计算机所能打开的最大文件个数。受硬件影响。
+
+> cat /proc/sys/fs/file-max
+
+当前用户下的进程，默认打开文件描述符个数。缺省为1024
+
+> ulimit  -a				查看
+>
+> ulimit -n 10000      修改
+
+如有需要，也可以通过修改配置文件的方式修改该上限值。
+
+  sudo vi /etc/security/limits.conf
+
+  在文件尾部写入以下配置,soft软限制，hard硬限制。如下图所示。
+
+> soft nofile 65536
+>
+> hard nofile 100000
+
+注意：soft值不能超过hard值
+
+#### epoll
+
+​		epoll是Linux下多路复用IO接口select/poll的增强版本，它能显著提高程序在大量并发连接中只有少量活跃的情况下的系统CPU利用率，因为它会复用文件描述符集合来传递结果而不用迫使开发者每次等待事件之前都必须重新准备要被侦听的文件描述符集合，另一点原因就是获取事件的时候，它无须遍历整个被侦听的描述符集，只要遍历那些被内核IO事件异步唤醒而加入Ready队列的描述符集合就行了。
+
+​		目前epoll是linux大规模并发网络程序中的热门首选模型。
+
+​		epoll除了提供select/poll那种IO事件的电平触发（Level Triggered）外，还提供了边沿触发（Edge Triggered），这就使得用户空间程序有可能缓存IO状态，减少epoll_wait/epoll_pwait的调用，提高应用程序效率。
+
+##### 基础API
+
+1.创建一个epoll句柄，参数size用来告诉内核监听的文件描述符的个数，跟内存大小有关。
+
+```c
+  #include <sys/epoll.h>
+
+  int epoll_create(int size)  
+
+ 	size：监听数目；创建的红黑树的监听结点的数量
+
+	返回值:成功指向新创建的红黑树的根节点的fd。
+          失败返回-1，errno
+```
+
+2.控制某个epoll监控的文件描述符上的事件：注册、修改、删除。
+
+  
+
+```c
+#include <sys/epoll.h>
+
+  int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+
+  epfd： 为epoll_creat的句柄，即epoll_create函数的返回值
+
+  op：  对监听红黑树所做的操作，用3个宏来表示：
+
+      		EPOLL_CTL_ADD (注册新的fd到epfd)，
+
+      		EPOLL_CTL_MOD (修改已经注册的fd的监听事件)，
+
+      		EPOLL_CTL_DEL (从epfd删除一个fd)；
+
+ fd:待监听的fd;如：连接事件，读写事件
+
+ event： 告诉内核需要监听的事件
+
+    struct epoll_event {
+
+      __uint32_t events; /* Epoll events */
+
+      epoll_data_t data; /* User data variable */
+
+    };
+	
+	__uint32_t events:
+
+	EPOLLIN ： 表示对应的文件描述符可以读（包括对端SOCKET正常关闭）
+
+    EPOLLOUT： 表示对应的文件描述符可以写
+
+    EPOLLPRI： 表示对应的文件描述符有紧急的数据可读（这里应该表示有带外数据到来）
+
+    EPOLLERR： 表示对应的文件描述符发生错误
+
+    EPOLLHUP： 表示对应的文件描述符被挂断；
+
+    EPOLLET：  将EPOLL设为边缘触发(Edge Triggered)模式，这是相对于水平触发(Level Triggered)而言的
+
+    EPOLLONESHOT：只监听一次事件，当监听完这次事件之后，如果还需要继续监听这个socket的话，需要再次把这个socket加入到EPOLL队列里
+
+    typedef union epoll_data {
+
+      void *ptr;
+
+      int fd;				//对应监听事件的fd
+
+      uint32_t u32;			//不用
+
+      uint64_t u64;			//不用
+
+    } epoll_data_t;
+
+返回值：成功：0;失败：-1，并设置errno
+
+```
+
+3. 等待所监控文件描述符上有事件的产生，类似于select()调用。
+
+```c
+  #include <sys/epoll.h>
+
+int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
+    
+epfd：epoll_create的返回值
+      
+events：  用来存内核得到事件的集合，可以简单看作成一个数组；传出参数：传出满足监听条件的那些结构体fd结构体。
+
+maxevents： 告之内核这个events有多大，这个maxevents的值不能大于创建epoll_create()时的size，
+
+timeout：  是超时时间
+
+  -1： 阻塞
+
+  0： 立即返回，非阻塞
+
+  >0： 指定毫秒
+
+返回值： 成功返回有多少文件描述符就绪，时间到时返回0，出错返回-1
+    	>0:返回满足监听的总个数
+```
+
+##### server
+
+listenfd:建立连接的读事件
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/epoll.h>
+#include <errno.h>
+#include "wrap.h"
+
+#define MAXLINE 80
+#define SERV_PORT 6666
+#define OPEN_MAX 1024
+
+int main(int argc, char *argv[])
+{
+	int i, j, maxi, listenfd, connfd, sockfd;
+	int nready, efd, res;
+	ssize_t n;
+	char buf[MAXLINE], str[INET_ADDRSTRLEN];
+	socklen_t clilen;
+	int client[OPEN_MAX];
+	struct sockaddr_in cliaddr, servaddr;
+    //tep:epoll_ctl参数
+    //ep[]:epoll_wait参数
+	struct epoll_event tep, ep[OPEN_MAX];
+
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	Bind(listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+
+	Listen(listenfd, 20);
+
+	for (i = 0; i < OPEN_MAX; i++)
+		client[i] = -1;
+	maxi = -1;
+
+    //创建epoll模型，efd指向红黑树根节点
+	efd = epoll_create(OPEN_MAX);
+	if (efd == -1)
+		perr_exit("epoll_create");
+
+    //指定lfd的监听事件为“读”
+	tep.events = EPOLLIN; 
+    tep.data.fd = listenfd;
+
+    //操作监听红黑树
+    //将lfd及对应的结构体设置到树上，efd可找到该树
+	res = epoll_ctl(efd, EPOLL_CTL_ADD, listenfd, &tep);
+	if (res == -1)
+		perr_exit("epoll_ctl");
+
+	while (1) {
+        //epoll为server阻塞监听事件，ep为struct epoll_event类型数组，OPEN_MAX为数组容量，-1代表永久阻塞
+		nready = epoll_wait(efd, ep, OPEN_MAX, -1); /* 阻塞监听 */
+		if (nready == -1)
+			perr_exit("epoll_wait");
+
+		for (i = 0; i < nready; i++) {
+            //如果不是读事件，则继续循环
+			if (!(ep[i].events & EPOLLIN))
+				continue;
+            //判断满足的事件的fd是不是lfd
+			if (ep[i].data.fd == listenfd) {
+				clilen = sizeof(cliaddr);
+                //建立连接
+				connfd = Accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
+				printf("received from %s at PORT %d\n", 
+						inet_ntop(AF_INET, &cliaddr.sin_addr, str, sizeof(str)), 
+						ntohs(cliaddr.sin_port));
+                /*
+				for (j = 0; j < OPEN_MAX; j++) {
+					if (client[j] < 0) {
+						client[j] = connfd; // save descriptor 
+						break;
+					}
+				}
+				
+
+				if (j == OPEN_MAX)
+					perr_exit("too many clients");
+				if (j > maxi)
+					maxi = j; // max index in client[] array 				*/
+				tep.events = EPOLLIN; 
+				tep.data.fd = connfd;
+res = epoll_ctl(efd, EPOLL_CTL_ADD, connfd, &tep);
+				if (res == -1)
+					perr_exit("epoll_ctl");
+			} else {
+                //数据读写事件
+				sockfd = ep[i].data.fd;
+				n = Read(sockfd, buf, MAXLINE);
+                //读到0，说明客户端关闭连接
+				if (n == 0) {
+                    /*
+					for (j = 0; j <= maxi; j++) {
+						if (client[j] == sockfd) {
+							client[j] = -1;
+							break;
+						}
+					}
+					*/
+                    //将该文件描述符从红黑树摘除
+					res = epoll_ctl(efd, EPOLL_CTL_DEL, sockfd, NULL);
+					if (res == -1)
+						perr_exit("epoll_ctl");
+
+					Close(sockfd);
+					printf("client[%d] closed connection\n", j);
+				} else {
+					for (j = 0; j < n; j++)
+						buf[j] = toupper(buf[j]);
+					Writen(sockfd, buf, n);
+				}
+			}
+		}
+	}
+	close(listenfd);
+	close(efd);
+	return 0;
+}
+
+```
+
+##### client
+
+```c
+/* client.c */
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include "wrap.h"
+
+#define MAXLINE 80
+#define SERV_PORT 6666
+
+int main(int argc, char *argv[])
+{
+	struct sockaddr_in servaddr;
+	char buf[MAXLINE];
+int sockfd, n;
+
+	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	Connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	while (fgets(buf, MAXLINE, stdin) != NULL) {
+		Write(sockfd, buf, strlen(buf));
+		n = Read(sockfd, buf, MAXLINE);
+		if (n == 0)
+			printf("the other side has been closed.\n");
+		else
+			Write(STDOUT_FILENO, buf, n);
+	}
+
+	Close(sockfd);
+	return 0;
+}
+```
+
+#### epoll进阶
+
+##### 事件模型
+
+EPOLL事件有两种模型：
+
+Edge Triggered (ET) **边缘**触发只有数据到达缓冲区才触发，不管缓存区中是否还有数据。
+
+Level Triggered (LT) **水平**触发只要缓冲区有数据都会触发。
+
+思考如下步骤：
+
+1. 假定我们已经把一个用来从管道中读取数据的文件描述符(RFD)添加到epoll描述符。
+
+2. 管道的另一端写入了2KB的数据
+
+3. 调用epoll_wait，并且它会返回RFD，说明它已经准备好读取操作
+
+4. 读取1KB的数据
+
+5. 调用epoll_wait……
+
+在这个过程中，有两种工作模式：
+
+##### ET模式
+
+ET模式即Edge Triggered工作模式。
+
+如果我们在第1步将RFD添加到epoll描述符的时候使用了EPOLLET标志，那么在第5步调用epoll_wait之后将有可能会挂起，因为剩余的数据还存在于文件的输入缓冲区内，而且数据发出端还在等待一个针对已经发出数据的反馈信息。只有在监视的文件句柄上发生了某个事件的时候 ET 工作模式才会汇报事件。因此在第5步的时候，调用者可能会放弃等待仍在存在于文件输入缓冲区内的剩余数据。epoll工作在ET模式的时候，必须使用非阻塞套接口，以避免由于一个文件句柄的阻塞读/阻塞写操作把处理多个文件描述符的任务饿死。最好以下面的方式调用ET模式的epoll接口，在后面会介绍避免可能的缺陷。
+
+​	1)   基于非阻塞文件句柄
+
+​	2)   只有当read或者write返回EAGAIN(非阻塞读，暂时无数据)时才需要挂起、等待。但这并不是说每次read时都需要循环读，直到读到产生一个EAGAIN才认为此次事件处理完成，当read返回的读到的数据长度小于请求的数据长度时，就可以确定此时缓冲中已没有数据了，也就可以认为此事读事件已处理完成。
+
+##### LT模式
+
+LT模式即Level Triggered工作模式。
+
+与ET模式不同的是，以LT方式调用epoll接口的时候，它就相当于一个速度比较快的poll，无论后面的数据是否被使用。
+
+LT(level triggered)：LT是默认的工作方式，并且同时支持block和no-block socket。在这种做法中，内核告诉你一个文件描述符是否就绪了，然后你可以对这个就绪的fd进行IO操作。如果你不作任何操作，内核还是会继续通知你的，所以，这种模式编程出错误可能性要小一点。传统的select/poll都是这种模型的代表。
+
+ET(edge-triggered)：ET是高速工作方式，只支持no-block socket。在这种模式下，当描述符从未就绪变为就绪时，内核通过epoll告诉你。然后它会假设你知道文件描述符已经就绪，并且不会再为那个文件描述符发送更多的就绪通知。请注意，如果一直不对这个fd作IO操作(从而导致它再次变成未就绪)，内核不会发送更多的通知(only once).
+
+##### 实例一
+
+基于管道epoll ET触发模式
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/epoll.h>
+#include <errno.h>
+#include <unistd.h>
+
+#define MAXLINE 10
+
+int main(int argc, char *argv[])
+{
+	int efd, i;
+	int pfd[2];
+	pid_t pid;
+	char buf[MAXLINE], ch = 'a';
+
+	pipe(pfd);
+	pid = fork();
+if (pid == 0) {
+    	//子进程   写事件
+		close(pfd[0]);
+		while (1) {
+            //写入aaaa\n
+			for (i = 0; i < MAXLINE/2; i++)
+				buf[i] = ch;
+			buf[i-1] = '\n';
+			ch++;
+            
+			//写入bbbb\n
+			for (; i < MAXLINE; i++)
+				buf[i] = ch;
+			buf[i-1] = '\n';
+			ch++;
+			//buf:aaaa\nbbbb\n
+			write(pfd[1], buf, sizeof(buf));
+			sleep(2);
+		}
+		close(pfd[1]);
+	} else if (pid > 0) {
+    	//父进程  读事件
+		struct epoll_event event;	//ctl
+		struct epoll_event resevent[10];		//wait
+		int res, len;
+		close(pfd[1]);
+
+		efd = epoll_create(10);
+		/* event.events = EPOLLIN; */	//LT水平触发（默认）
+		event.events = EPOLLIN | EPOLLET;		/* ET 边沿触发 ，默认是水平触发 */
+		event.data.fd = pfd[0];
+		epoll_ctl(efd, EPOLL_CTL_ADD, pfd[0], &event);
+
+		while (1) {
+			res = epoll_wait(efd, resevent, 10, -1);
+			printf("res %d\n", res);
+            //判断是否是读事件
+			if (resevent[0].data.fd == pfd[0]) {
+				len = read(pfd[0], buf, MAXLINE/2);
+				write(STDOUT_FILENO, buf, len);
+			}
+		}
+		close(pfd[0]);
+		close(efd);
+	} else {
+		perror("fork");
+		exit(-1);
+	}
 	return 0;
 }
 ```
