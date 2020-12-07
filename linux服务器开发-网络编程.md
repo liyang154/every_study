@@ -2285,3 +2285,264 @@ if (pid == 0) {
 }
 ```
 
+##### 实例二
+
+基于网络C/S模型的epoll ET触发模式（一般不用阻塞的ET）
+
+###### server
+
+```c
+/* server.c */
+#include <stdio.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/epoll.h>
+#include <unistd.h>
+
+#define MAXLINE 10
+#define SERV_PORT 8080
+
+int main(void)
+{
+	struct sockaddr_in servaddr, cliaddr;
+	socklen_t cliaddr_len;
+	int listenfd, connfd;
+	char buf[MAXLINE];
+	char str[INET_ADDRSTRLEN];
+	int i, efd;
+
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	listen(listenfd, 20);
+
+	struct epoll_event event;
+	struct epoll_event resevent[10];
+	int res, len;
+	efd = epoll_create(10);
+	event.events = EPOLLIN | EPOLLET;		/* ET 边沿触发 ，默认是水平触发 */
+
+	printf("Accepting connections ...\n");
+cliaddr_len = sizeof(cliaddr);
+	connfd = accept(listenfd, (struct sockaddr *)&cliaddr, &cliaddr_len);
+	printf("received from %s at PORT %d\n",
+			inet_ntop(AF_INET, &cliaddr.sin_addr, str, sizeof(str)),
+			ntohs(cliaddr.sin_port));
+
+	event.data.fd = connfd;
+	epoll_ctl(efd, EPOLL_CTL_ADD, connfd, &event);
+
+	while (1) {
+		res = epoll_wait(efd, resevent, 10, -1);
+		printf("res %d\n", res);
+		if (resevent[0].data.fd == connfd) {
+			len = read(connfd, buf, MAXLINE/2);
+			write(STDOUT_FILENO, buf, len);
+		}
+	}
+	return 0;
+}
+```
+
+###### client
+
+```c
+/* client.c */
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <netinet/in.h>
+
+#define MAXLINE 10
+#define SERV_PORT 8080
+
+int main(int argc, char *argv[])
+{
+	struct sockaddr_in servaddr;
+	char buf[MAXLINE];
+	int sockfd, i;
+	char ch = 'a';
+
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	while (1) {
+for (i = 0; i < MAXLINE/2; i++)
+			buf[i] = ch;
+		buf[i-1] = '\n';
+		ch++;
+
+		for (; i < MAXLINE; i++)
+			buf[i] = ch;
+		buf[i-1] = '\n';
+		ch++;
+
+		write(sockfd, buf, sizeof(buf));
+		sleep(10);
+	}
+	Close(sockfd);
+	return 0;
+}
+
+```
+
+##### 实例三
+
+基于网络C/S非阻塞模型的epoll ET触发模式
+
+###### server
+
+```c
+/* server.c */
+#include <stdio.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/epoll.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#define MAXLINE 10
+#define SERV_PORT 8080
+
+int main(void)
+{
+	struct sockaddr_in servaddr, cliaddr;
+	socklen_t cliaddr_len;
+	int listenfd, connfd;
+	char buf[MAXLINE];
+	char str[INET_ADDRSTRLEN];
+	int i, efd, flag;
+
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	listen(listenfd, 20);
+
+	struct epoll_event event;			//epoll_ctl
+	struct epoll_event resevent[10];	//epoll_wait
+	int res, len;
+	efd = epoll_create(10);
+	/* event.events = EPOLLIN; */
+	event.events = EPOLLIN | EPOLLET;		/* ET 边沿触发 ，默认是水平触发 */
+
+	printf("Accepting connections ...\n");
+	cliaddr_len = sizeof(cliaddr);
+	connfd = accept(listenfd, (struct sockaddr *)&cliaddr, &cliaddr_len);
+	printf("received from %s at PORT %d\n",
+			inet_ntop(AF_INET, &cliaddr.sin_addr, str, sizeof(str)),
+			ntohs(cliaddr.sin_port));
+
+    //设置非阻塞
+    //修改connfd为非阻塞
+	flag = fcntl(connfd, F_GETFL);
+	flag |= O_NONBLOCK;
+	fcntl(connfd, F_SETFL, flag);
+	event.data.fd = connfd;
+	epoll_ctl(efd, EPOLL_CTL_ADD, connfd, &event);
+
+	while (1) {
+		printf("epoll_wait begin\n");
+		res = epoll_wait(efd, resevent, 10, -1);
+		printf("epoll_wait end res %d\n", res);
+
+		if (resevent[0].data.fd == connfd) {
+			while ((len = read(connfd, buf, MAXLINE/2)) > 0)
+				write(STDOUT_FILENO, buf, len);
+		}
+	}
+	return 0;
+}
+```
+
+###### client
+
+```c
+/* client.c */
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <netinet/in.h>
+
+#define MAXLINE 10
+#define SERV_PORT 8080
+
+int main(int argc, char *argv[])
+{
+	struct sockaddr_in servaddr;
+	char buf[MAXLINE];
+	int sockfd, i;
+	char ch = 'a';
+
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
+	servaddr.sin_port = htons(SERV_PORT);
+
+	connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	while (1) {
+		for (i = 0; i < MAXLINE/2; i++)
+			buf[i] = ch;
+		buf[i-1] = '\n';
+		ch++;
+
+		for (; i < MAXLINE; i++)
+			buf[i] = ch;
+		buf[i-1] = '\n';
+		ch++;
+
+		write(sockfd, buf, sizeof(buf));
+		sleep(10);
+	}
+	Close(sockfd);
+	return 0;
+}
+```
+
+epoll的ET模式是高效的模式，只支持非阻塞模式。需要忙轮询，即循环。
+
+##### 优点：
+
+​		高效，能突破1024文件描述符的限制。
+
+##### 缺点：
+
+​		不能跨平台
+
+#### epoll反应堆模型
+
+epoll ET 模式+非阻塞+void *ptr（回调函数）
+
+原来的方法：socket、bind、listen、epoll_create创建监听红黑树 ---返回epfd ----epoll_ctl()向树上添加一个监听fd ---- while(1)----epoll_wait 监听 ---- 对应监听fd有事件产生 ---返回 监听满足数组。 ----判断返回数组元素 ---lfd满足---Accept ---cfd 满足---- read() ---小转大 ---- write回去
+
+反应堆：不但要监听cfd的读事件，还要监听cfd的写事件。
+
+socket、bind、listen、epoll_create创建监听红黑树 ---返回epfd ----epoll_ctl()向树上添加一个监听fd ---- while(1)----epoll_wait 监听 ---- 对应监听fd有事件产生 ---返回 监听满足数组。 ----判断返回数组元素 ---lfd满足---Accept ---cfd 满足---- read() ---小转大 ---cfd从监听红黑树上摘下---EPOLLOUT---- 回调函数----epoll_ctl()----- EPOLL_CTL_ADD重新放到红黑树上监听写事件——----epoll_ctl()监听cfd的写事件----等待epoll_wait返回----说明cfd可写---- write回去---cfd从监听红黑树上摘下---EPOLLIN----epoll_ctl()----- EPOLL_CTL_ADD重新放到红黑树上监听读事件---epoll_wait监听
+
+原来没出错的原因是原来环境简单，一旦对端滑动窗口半关闭或者对端滑动窗口已满，则原来的方法会出错。
